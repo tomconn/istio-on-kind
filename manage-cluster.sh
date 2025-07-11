@@ -11,8 +11,6 @@ set -o pipefail
 ISTIO_VERSION="1.26.2"
 CLUSTER_NAME="istio-dev"
 KIND_CONFIG="kind-config.yaml"
-METALLB_CONFIG="metallb-config.yaml"
-ISTIO_CONFIG="istio-config.yaml"
 
 # --- Helper Functions ---
 function check_command() {
@@ -41,22 +39,6 @@ function start_cluster() {
     fi
     echo
 
-    echo "--- Installing MetalLB Load Balancer ---"
-    kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.5/config/manifests/metallb-native.yaml
-    echo "Waiting for MetalLB pods to be ready..."
-    kubectl wait --namespace metallb-system \
-        --for=condition=ready pod \
-        --selector=app=metallb \
-        --timeout=120s
-    
-    echo "Giving the MetalLB webhook a moment to initialize..."
-    sleep 15
-
-    echo "Applying MetalLB IP address pool configuration from ${METALLB_CONFIG}..."
-    kubectl apply -f "${METALLB_CONFIG}"
-    echo "MetalLB is ready."
-    echo
-
     echo "--- Setting up Istio (version ${ISTIO_VERSION}) ---"
     if ! command -v "istioctl" &> /dev/null || ! istioctl version | grep -q "${ISTIO_VERSION}"; then
         echo "istioctl ${ISTIO_VERSION} not found. Downloading..."
@@ -65,13 +47,14 @@ function start_cluster() {
         echo "istioctl has been temporarily added to your PATH for this session."
     fi
 
-    echo "Installing Istio using configuration from ${ISTIO_CONFIG}..."
-    istioctl install -y -f "${ISTIO_CONFIG}"
-    
+    echo "Installing Istio profile=demo..."
+    istioctl install -y --set profile=demo
+
     echo "Waiting for Istio pods to be ready..."
     kubectl wait --namespace istio-system \
       --for=condition=ready pod --all \
       --timeout=300s
+    kubectl label namespace default istio-injection=enabled
     echo "Istio installation complete and verified."
     echo
 
@@ -86,7 +69,7 @@ function start_cluster() {
     # ---- START OF RELIABLE GATEWAY FIX ----
     # Instead of downloading and patching, we create the correct gateway config directly.
     # This avoids any issues with sed or remote file changes.
-    echo "Creating a known-good bookinfo-gateway.yaml that listens on port 80..."
+    echo "Creating a known-good bookinfo-gateway.yaml that listens on port 8080..."
     cat <<EOF > bookinfo-gateway.yaml
 apiVersion: networking.istio.io/v1alpha3
 kind: Gateway
@@ -97,7 +80,7 @@ spec:
     istio: ingressgateway # use istio default ingress gateway
   servers:
   - port:
-      number: 80
+      number: 8080
       name: http
       protocol: HTTP
     hosts:
