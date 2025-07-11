@@ -11,6 +11,8 @@ set -o pipefail
 ISTIO_VERSION="1.26.2"
 CLUSTER_NAME="istio-dev"
 KIND_CONFIG="kind-config.yaml"
+CLOUD_PROVIDER_KIND_VERSION="v0.7.0"
+PID_FILE=".cloud-provider-kind.pid"
 
 # --- Helper Functions ---
 function check_command() {
@@ -21,6 +23,44 @@ function check_command() {
 }
 
 # --- Core Functions ---
+install_cloud_provider() {
+    echo ">>> Checking for cloud-provider-kind..."
+    if command -v cloud-provider-kind &> /dev/null; then
+        echo "cloud-provider-kind is already installed."
+        return
+    fi
+
+    echo "cloud-provider-kind not found. Installing..."
+    local os
+    os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    local arch
+    case $(uname -m) in
+        x86_64) arch="amd64" ;;
+        arm64|aarch64) arch="arm64" ;;
+        *)
+            echo "Unsupported architecture: $(uname -m)"
+            exit 1
+            ;;
+    esac
+
+    local release_file="cloud-provider-kind_${CLOUD_PROVIDER_KIND_VERSION#v}_${os}_${arch}.tar.gz"
+    local download_url="https://github.com/kubernetes-sigs/cloud-provider-kind/releases/download/${CLOUD_PROVIDER_KIND_VERSION}/${release_file}"
+
+    echo "Downloading from: ${download_url}"
+    wget -q -O "${release_file}" "${download_url}"
+    
+    tar -xvf "${release_file}"
+    chmod +x ./cloud-provider-kind
+    
+    echo "Moving cloud-provider-kind to /usr/local/bin/. You may be prompted for your password."
+    if ! sudo mv ./cloud-provider-kind /usr/local/bin/cloud-provider-kind; then
+        echo "Failed to move cloud-provider-kind. Please try running 'sudo mv ./cloud-provider-kind /usr/local/bin/cloud-provider-kind' manually."
+        exit 1
+    fi
+    
+    rm "${release_file}"
+    echo "Successfully installed $(cloud-provider-kind --version)"
+}
 
 function start_cluster() {
     echo "--- Checking prerequisites ---"
@@ -29,6 +69,15 @@ function start_cluster() {
     check_command "curl"
     echo "All prerequisites are met."
     echo
+
+    install_cloud_provider
+
+    echo "--- Starting cloud-provider-kind... may require the password"
+    sudo cloud-provider-kind &
+    # Save the PID of the background process
+    echo $! > "${PID_FILE}"
+    sleep 2 # Give it a moment to start
+    echo "cloud-provider-kind started with PID $(cat ${PID_FILE})."
 
     echo "--- Creating Kind cluster: ${CLUSTER_NAME} ---"
     if ! kind get clusters | grep -q "^${CLUSTER_NAME}$"; then
@@ -151,6 +200,22 @@ EOF
 }
 
 function destroy_cluster() {
+    echo "--- Stopping cloud-provider-kind process..."
+    if [ -f "${PID_FILE}" ]; then
+        PID=$(cat "${PID_FILE}")
+        if ps -p "${PID}" > /dev/null; then
+            echo "Killing process with PID ${PID}."
+            kill "${PID}"
+            rm "${PID_FILE}"
+            echo "Process killed and PID file removed."
+        else
+            echo "Process with PID ${PID} not found. Removing stale PID file."
+            rm "${PID_FILE}"
+        fi
+    else
+        echo "PID file not found. Skipping process kill."
+    fi
+
     echo "--- Destroying Kind cluster: ${CLUSTER_NAME} ---"
     if kind get clusters | grep -q "^${CLUSTER_NAME}$"; then
         kind delete cluster --name "${CLUSTER_NAME}"
