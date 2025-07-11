@@ -22,9 +22,49 @@ function check_command() {
     fi
 }
 
+test_gateway() {
+    echo "--- Testing the Ingress Gateway..."
+    
+    local EXTERNAL_IP
+    local retries=6
+    local delay=10
+
+    echo "Attempting to get External IP for istio-ingressgateway..."
+    for i in $(seq 1 $retries); do
+        # Use jsonpath to extract the IP, redirect stderr to prevent errors if the field isn't ready
+        EXTERNAL_IP=$(kubectl get svc istio-ingressgateway -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+        if [ -n "$EXTERNAL_IP" ]; then
+            echo "Found External IP: ${EXTERNAL_IP}"
+            break
+        fi
+        echo "Waiting for External IP to be assigned... (${i}/${retries})"
+        sleep $delay
+    done
+
+    if [ -z "$EXTERNAL_IP" ]; then
+        echo "Error: Timed out waiting for External IP for istio-ingressgateway."
+        echo "Please ensure the bookinfo sample app is deployed and check service status."
+        exit 1
+    fi
+
+    echo "--- Running test command: curl -s http://${EXTERNAL_IP}/productpage | grep -o '<title>.*</title>'"
+    
+    # Run the curl command and capture output
+    local title
+    title=$(curl -s --connect-timeout 5 "http://${EXTERNAL_IP}/productpage" | grep -o '<title>.*</title>')
+
+    if [ -n "$title" ]; then
+        echo "Success! Received response:"
+        echo "$title"
+    else
+        echo "Error: Failed to get a valid response from http://${EXTERNAL_IP}/productpage"
+        echo "Please ensure the bookinfo sample application has been deployed correctly."
+    fi
+}
+
 # --- Core Functions ---
 install_cloud_provider() {
-    echo ">>> Checking for cloud-provider-kind..."
+    echo "--- Checking for cloud-provider-kind..."
     if command -v cloud-provider-kind &> /dev/null; then
         echo "cloud-provider-kind is already installed."
         return
@@ -173,6 +213,8 @@ EOF
     echo "Waiting for all pods in the 'default' namespace to be ready..."
     kubectl wait --for=condition=ready pod --all --namespace default --timeout=300s
     
+    test_gateway
+
     echo "✅ ✅ ✅ Cluster setup is complete! ✅ ✅ ✅"
     echo
     echo "--- HOW TO EXPLORE YOUR NEW CLUSTER ---"
@@ -181,8 +223,8 @@ EOF
     echo "   kubectl get svc istio-ingressgateway -n istio-system"
     echo
     echo "2. Access the Bookinfo Application:"
-    echo "   (Run this a few times to see different versions of the reviews page)"
-    echo "   curl -s http://<EXTERNAL-IP>/productpage | grep -o '<title>.*</title>'"
+    echo "   EXTERNAL_IP=\$(kubectl get svc istio-ingressgateway -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}' "
+    echo "   curl -s http://\${EXTERNAL_IP}/productpage | grep -o '<title>.*</title>'"
     echo
     echo "3. Open the Kiali Service Mesh Dashboard:"
     echo "   (Visualizes your service graph and configurations)"
