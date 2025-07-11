@@ -128,12 +128,12 @@ EOF
     echo
     echo "--- HOW TO EXPLORE YOUR NEW CLUSTER ---"
     echo
-    echo "1. Access the Bookinfo Application:"
-    echo "   (Run this a few times to see different versions of the reviews page)"
-    echo "   curl -s http://localhost/productpage | grep -o '<title>.*</title>'"
-    echo
-    echo "2. Find the Load Balancer IP:"
+    echo "1. Find the Load Balancer IP:"
     echo "   kubectl get svc istio-ingressgateway -n istio-system"
+    echo
+    echo "2. Access the Bookinfo Application:"
+    echo "   (Run this a few times to see different versions of the reviews page)"
+    echo "   curl -s http://<EXTERNAL-IP>/productpage | grep -o '<title>.*</title>'"
     echo
     echo "3. Open the Kiali Service Mesh Dashboard:"
     echo "   (Visualizes your service graph and configurations)"
@@ -145,7 +145,7 @@ EOF
     echo
     echo "5. Inspect the Ingress Gateway's live routes:"
     echo "   export INGRESS_POD=\$(kubectl get pods -n istio-system -l app=istio-ingressgateway -o jsonpath='{.items[0].metadata.name}')"
-    echo "   istioctl proxy-config routes \$INGRESS_POD -n istio-system --name http.80"
+    echo "   istioctl proxy-config routes \$INGRESS_POD -n istio-system --name http.8080"
     echo
     echo "-----------------------------------------"
 }
