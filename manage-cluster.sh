@@ -8,7 +8,6 @@ set -o nounset
 set -o pipefail
 
 # --- Configuration ---
-# Removed 'readonly' to allow the Istio download script to set a temporary environment variable.
 ISTIO_VERSION="1.26.2"
 CLUSTER_NAME="istio-dev"
 KIND_CONFIG="kind-config.yaml"
@@ -61,22 +60,13 @@ function start_cluster() {
     echo "--- Setting up Istio (version ${ISTIO_VERSION}) ---"
     if ! command -v "istioctl" &> /dev/null || ! istioctl version | grep -q "${ISTIO_VERSION}"; then
         echo "istioctl ${ISTIO_VERSION} not found. Downloading..."
-        # The following line requires ISTIO_VERSION to be a regular variable, not readonly.
         curl -L https://istio.io/downloadIstio | ISTIO_VERSION=${ISTIO_VERSION} sh -
         export PATH=$PWD/istio-${ISTIO_VERSION}/bin:$PATH
         echo "istioctl has been temporarily added to your PATH for this session."
-        echo "For permanent use, add '$PWD/istio-${ISTIO_VERSION}/bin' to your shell profile."
     fi
 
     echo "Installing Istio using configuration from ${ISTIO_CONFIG}..."
-    if ! istioctl install -y -f "${ISTIO_CONFIG}"; then
-        echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" >&2
-        echo "ERROR: Istio installation failed." >&2
-        echo "Please review the output from 'istioctl' above to diagnose." >&2
-        echo "You may need to run './manage-cluster.sh destroy' before trying again." >&2
-        echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" >&2
-        exit 1
-    fi
+    istioctl install -y -f "${ISTIO_CONFIG}"
     
     echo "Waiting for Istio pods to be ready..."
     kubectl wait --namespace istio-system \
@@ -93,8 +83,56 @@ function start_cluster() {
     curl -sL "https://raw.githubusercontent.com/istio/istio/release-1.26/samples/bookinfo/platform/kube/bookinfo.yaml" -o bookinfo.yaml
     kubectl apply -f bookinfo.yaml
 
-    echo "Applying Bookinfo gateway..."
-    curl -sL "https://raw.githubusercontent.com/istio/istio/release-1.26/samples/bookinfo/networking/bookinfo-gateway.yaml" -o bookinfo-gateway.yaml
+    # ---- START OF RELIABLE GATEWAY FIX ----
+    # Instead of downloading and patching, we create the correct gateway config directly.
+    # This avoids any issues with sed or remote file changes.
+    echo "Creating a known-good bookinfo-gateway.yaml that listens on port 80..."
+    cat <<EOF > bookinfo-gateway.yaml
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: bookinfo-gateway
+spec:
+  selector:
+    istio: ingressgateway # use istio default ingress gateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "*"
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: bookinfo
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - bookinfo-gateway
+  http:
+  - match:
+    - uri:
+        exact: /productpage
+    - uri:
+        prefix: /static
+    - uri:
+        exact: /login
+    - uri:
+        exact: /logout
+    - uri:
+        prefix: /api/v1/products
+    route:
+    - destination:
+        host: productpage
+        port:
+          number: 9080
+EOF
+    # ---- END OF RELIABLE GATEWAY FIX ----
+
+    echo "Applying the generated Bookinfo gateway..."
     kubectl apply -f bookinfo-gateway.yaml
     echo "Bookinfo application deployed."
     echo
@@ -103,11 +141,30 @@ function start_cluster() {
     echo "Waiting for all pods in the 'default' namespace to be ready..."
     kubectl wait --for=condition=ready pod --all --namespace default --timeout=300s
     
-    echo "Cluster setup is complete!"
-    echo "Run this command to find your Load Balancer IP:"
-    echo "kubectl get svc istio-ingressgateway -n istio-system"
+    echo "✅ ✅ ✅ Cluster setup is complete! ✅ ✅ ✅"
     echo
-    echo "You can access the Bookinfo product page at http://localhost/productpage"
+    echo "--- HOW TO EXPLORE YOUR NEW CLUSTER ---"
+    echo
+    echo "1. Access the Bookinfo Application:"
+    echo "   (Run this a few times to see different versions of the reviews page)"
+    echo "   curl -s http://localhost/productpage | grep -o '<title>.*</title>'"
+    echo
+    echo "2. Find the Load Balancer IP:"
+    echo "   kubectl get svc istio-ingressgateway -n istio-system"
+    echo
+    echo "3. Open the Kiali Service Mesh Dashboard:"
+    echo "   (Visualizes your service graph and configurations)"
+    echo "   istioctl dashboard kiali"
+    echo
+    echo "4. Open the Jaeger Tracing Dashboard:"
+    echo "   (Shows distributed traces from the Bookinfo app)"
+    echo "   istioctl dashboard jaeger"
+    echo
+    echo "5. Inspect the Ingress Gateway's live routes:"
+    echo "   export INGRESS_POD=\$(kubectl get pods -n istio-system -l app=istio-ingressgateway -o jsonpath='{.items[0].metadata.name}')"
+    echo "   istioctl proxy-config routes \$INGRESS_POD -n istio-system --name http.80"
+    echo
+    echo "-----------------------------------------"
 }
 
 function destroy_cluster() {
