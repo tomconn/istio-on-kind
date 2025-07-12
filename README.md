@@ -64,7 +64,7 @@ This command will:
 3.  Install Istio `1.26.2`.
 4.  Deploy the Bookinfo application.
 
-After the script completes, you will need to start the cloud provider in a separate terminal:
+As the script runs, it will prompt for a password as the `cloud-provider-kind` requires sudo to execute.
 ```bash
 sudo cloud-provider-kind &
 ```
@@ -87,10 +87,10 @@ After running the start script, the Istio Ingress Gateway service will be assign
 kubectl get svc -n istio-system istio-ingressgateway
 EXTERNAL_IP=\$(kubectl get svc istio-ingressgateway -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 curl -s http://\${EXTERNAL_IP}/productpage | grep -o '<title>.*</title>'
+```
 
 Success! Received response:
 <title>Simple Bookstore App</title>
-```
 
 ### Internal Access (Alternative)
 
