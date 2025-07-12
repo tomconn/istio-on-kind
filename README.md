@@ -89,8 +89,10 @@ EXTERNAL_IP=\$(kubectl get svc istio-ingressgateway -n istio-system -o jsonpath=
 curl -s http://\${EXTERNAL_IP}/productpage | grep -o '<title>.*</title>'
 ```
 
+```bash
 Success! Received response:
 <title>Simple Bookstore App</title>
+```
 
 ### Internal Access (Alternative)
 
