@@ -22,7 +22,7 @@ function check_command() {
     fi
 }
 
-test_gateway() {
+function test_gateway() {
     echo "--- Testing the Ingress Gateway..."
     
     local EXTERNAL_IP
@@ -63,7 +63,7 @@ test_gateway() {
 }
 
 # --- Core Functions ---
-install_cloud_provider() {
+function install_cloud_provider() {
     echo "--- Checking for cloud-provider-kind..."
     if command -v cloud-provider-kind &> /dev/null; then
         echo "cloud-provider-kind is already installed."
@@ -155,7 +155,6 @@ function start_cluster() {
     curl -sL "https://raw.githubusercontent.com/istio/istio/release-1.26/samples/bookinfo/platform/kube/bookinfo.yaml" -o bookinfo.yaml
     kubectl apply -f bookinfo.yaml
 
-    # ---- START OF RELIABLE GATEWAY FIX ----
     # Instead of downloading and patching, we create the correct gateway config directly.
     # This avoids any issues with sed or remote file changes.
     echo "Creating a known-good bookinfo-gateway.yaml that listens on port 8080..."
@@ -202,7 +201,7 @@ spec:
         port:
           number: 9080
 EOF
-    # ---- END OF RELIABLE GATEWAY FIX ----
+    # ---- END OF GATEWAY ----
 
     echo "Applying the generated Bookinfo gateway..."
     kubectl apply -f bookinfo-gateway.yaml
