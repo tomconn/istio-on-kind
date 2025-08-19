@@ -236,7 +236,7 @@ EOF
     echo "   kubectl get svc istio-ingressgateway -n istio-system"
     echo
     echo "2. Access the Bookinfo Application:"
-    echo "   EXTERNAL_IP=\$(kubectl get svc istio-ingressgateway -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}' "
+    echo "   EXTERNAL_IP=\$(kubectl get svc istio-ingressgateway -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}')"
     echo "   curl -s http://\${EXTERNAL_IP}/productpage | grep -o '<title>.*</title>'"
     echo
     echo "3. Open the Kiali Service Mesh Dashboard:"
