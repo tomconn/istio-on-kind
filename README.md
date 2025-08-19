@@ -85,7 +85,7 @@ Once the cluster is running and `cloud-provider-kind` is active, you can access 
 After running the start script, the Istio Ingress Gateway service will be assigned an external IP address. You can find this IP by running:
 ```bash
 kubectl get svc -n istio-system istio-ingressgateway
-EXTERNAL_IP=\$(kubectl get svc istio-ingressgateway -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+EXTERNAL_IP=\$(kubectl get svc istio-ingressgateway -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 curl -s http://\${EXTERNAL_IP}/productpage | grep -o '<title>.*</title>'
 ```
 
