@@ -46,7 +46,7 @@ function test_gateway() {
     echo "Attempting to get External IP for istio-ingressgateway..."
     for i in $(seq 1 $retries); do
         # Use jsonpath to extract the IP, redirect stderr to prevent errors if the field isn't ready
-        EXTERNAL_IP=$(kubectl get svc istio-ingressgateway -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}') 2>/dev/null || true)
+        EXTERNAL_IP=$(kubectl get svc istio-ingressgateway -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
         if [ -n "$EXTERNAL_IP" ]; then
             echo "Found External IP: ${EXTERNAL_IP}"
             break
