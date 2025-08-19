@@ -7,8 +7,22 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+# convert from revision 1.26.2 -> 1-26-2
+convert_version_sed() {
+  if [[ -z "$1" ]]; then
+    echo "Error: No version string provided." >&2
+    return 1
+  fi
+
+  # Pipe the input string to sed.
+  # The 'g' at the end of 's/\./-/g' means "global" (replace all).
+  echo "$1" | sed 's/\./-/g'
+}
+
 # --- Configuration ---
 ISTIO_VERSION="1.26.2"
+echo $(convert_version_sed "$ISTIO_VERSION")
+ISTIO_VERSION_REVISION=$(convert_version_sed "$ISTIO_VERSION")
 CLUSTER_NAME="istio-dev"
 KIND_CONFIG="kind-config.yaml"
 CLOUD_PROVIDER_KIND_VERSION="v0.7.0"
@@ -137,7 +151,7 @@ function start_cluster() {
     fi
 
     echo "Installing Istio profile=demo..."
-    istioctl install -y --set profile=demo
+    istioctl install -y --set profile=demo --revision=${ISTIO_VERSION_REVISION}
 
     echo "Waiting for Istio pods to be ready..."
     kubectl wait --namespace istio-system \
